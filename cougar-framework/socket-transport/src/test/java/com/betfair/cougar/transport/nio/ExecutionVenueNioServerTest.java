@@ -17,6 +17,7 @@
 package com.betfair.cougar.transport.nio;
 
 import com.betfair.cougar.api.ExecutionContext;
+import com.betfair.cougar.api.ExecutionContextWithTokens;
 import com.betfair.cougar.api.RequestUUID;
 import com.betfair.cougar.api.export.Protocol;
 import com.betfair.cougar.api.geolocation.GeoLocationDetails;
@@ -35,7 +36,8 @@ import com.betfair.cougar.core.api.transcription.ParameterType;
 import com.betfair.cougar.core.impl.DefaultTimeConstraints;
 import com.betfair.cougar.core.impl.security.CommonNameCertInfoExtractor;
 import com.betfair.cougar.core.impl.transports.TransportRegistryImpl;
-import org.slf4j.LoggerFactory;
+import com.betfair.cougar.transport.api.TransportCommand;
+import com.betfair.cougar.transport.impl.filters.FiltersDelegate;
 import com.betfair.cougar.netutil.nio.marshalling.DefaultSocketTimeResolver;
 import com.betfair.cougar.netutil.nio.marshalling.SocketRMIMarshaller;
 import com.betfair.cougar.netutil.nio.CougarProtocol;
@@ -173,6 +175,7 @@ public class ExecutionVenueNioServerTest {
     private ExecutionVenue ev;
     private SocketTransportCommandProcessor cmdProcessor;
     private byte[] clientConnectVersions;
+    private FiltersDelegate filtersDelegate;
 
 	private HessianObjectIOFactory ioFactory;
 
@@ -209,6 +212,10 @@ public class ExecutionVenueNioServerTest {
 
         cmdProcessor = new SocketTransportCommandProcessor();
         cmdProcessor.setIdentityResolverFactory(new IdentityResolverFactory());
+
+        filtersDelegate = Mockito.mock(FiltersDelegate.class);
+        Mockito.when(filtersDelegate.applyBeforeFilters(Mockito.any(ExecutionContextWithTokens.class), Mockito.any(TransportCommand.class))).thenReturn(true);
+        cmdProcessor.setFiltersDelegate(filtersDelegate);
 
         executor = new Executor() {
             @Override

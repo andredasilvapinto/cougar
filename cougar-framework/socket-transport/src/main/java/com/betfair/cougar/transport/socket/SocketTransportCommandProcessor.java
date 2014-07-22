@@ -53,12 +53,8 @@ import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import java.security.cert.X509Certificate;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Level;
 
 @ManagedResource
 public class SocketTransportCommandProcessor extends AbstractCommandProcessor<SocketTransportCommand> implements GateListener {
@@ -97,6 +93,7 @@ public class SocketTransportCommandProcessor extends AbstractCommandProcessor<So
             super.process(command);    //To change body of overridden methods use File | Settings | File Templates.
         } else {
             try {
+                //TODO: ExecutionContext needed for applyBeforeFilters
                 CougarObjectInput input = command.getInput();
                 Object eventPayload = input.readObject();
                 input.close();

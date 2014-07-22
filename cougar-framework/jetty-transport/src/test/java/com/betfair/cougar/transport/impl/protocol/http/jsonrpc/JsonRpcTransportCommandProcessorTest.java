@@ -45,6 +45,7 @@ import com.betfair.cougar.core.api.transcription.Parameter;
 import com.betfair.cougar.core.api.transcription.ParameterType;
 import com.betfair.cougar.core.impl.ev.BaseExecutionVenue;
 import com.betfair.cougar.logging.CougarLoggingUtils;
+import com.betfair.cougar.transport.impl.filters.FiltersDelegate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.betfair.cougar.logging.EventLogDefinition;
@@ -119,6 +120,7 @@ public class JsonRpcTransportCommandProcessorTest  {
     protected CommandValidatorRegistry<HttpCommand> validatorRegistry = new CommandValidatorRegistry<HttpCommand>();
     private ExecutionVenue ev;
     private RequestTimeResolver requestTimeResolver;
+    private FiltersDelegate filtersDelegate;
 
     @BeforeClass
     public static void setupStatic() {
@@ -142,6 +144,9 @@ public class JsonRpcTransportCommandProcessorTest  {
 
         requestTimeResolver = mock(RequestTimeResolver.class);
 
+        filtersDelegate = mock(FiltersDelegate.class);
+        when(filtersDelegate.applyBeforeFilters(any(ExecutionContextWithTokens.class), any(TransportCommand.class))).thenReturn(true);
+
         commandProcessor = new LocalJsonRpcCommandProcessor(requestTimeResolver, new JSONBindingFactory());
         commandProcessor.setContentTypeNormaliser(ctn);
         commandProcessor.setRequestLogger(logger);
@@ -153,6 +158,7 @@ public class JsonRpcTransportCommandProcessorTest  {
             }
         });
         commandProcessor.setExecutionVenue(ev = mock(ExecutionVenue.class));
+        commandProcessor.setFiltersDelegate(filtersDelegate);
 
 
         objectMapper = new ObjectMapper();

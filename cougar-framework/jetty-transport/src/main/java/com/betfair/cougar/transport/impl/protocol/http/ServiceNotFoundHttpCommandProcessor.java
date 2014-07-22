@@ -78,7 +78,11 @@ public class ServiceNotFoundHttpCommandProcessor extends AbstractHttpCommandProc
             } catch (IOException ex) {
                 LOGGER.error("Unable to write error response", ex);
             } finally {
-                command.onComplete();
+                try {
+                    applyAfterFilters(context, command);
+                } finally {
+                    command.onComplete();
+                }
             }
 		}
 	}

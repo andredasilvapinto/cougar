@@ -23,6 +23,8 @@ import java.util.logging.Level;
 
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
+
+import com.betfair.cougar.api.ExecutionContextWithTokens;
 import com.betfair.cougar.api.export.Protocol;
 import com.betfair.cougar.client.socket.resolver.DNSBasedAddressResolver;
 import com.betfair.cougar.core.api.OperationBindingDescriptor;
@@ -32,6 +34,8 @@ import com.betfair.cougar.core.api.ev.ExecutionTimingRecorder;
 import com.betfair.cougar.core.api.ev.TimeConstraints;
 import com.betfair.cougar.core.api.exception.ServerFaultCode;
 import com.betfair.cougar.core.impl.security.CommonNameCertInfoExtractor;
+import com.betfair.cougar.transport.api.TransportCommand;
+import com.betfair.cougar.transport.impl.filters.FiltersDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.betfair.cougar.netutil.nio.CougarProtocol;
@@ -86,6 +90,10 @@ public class ServerClientFactory {
 
 	    SocketTransportCommandProcessor cmdProcessor = new SocketTransportCommandProcessor();
         cmdProcessor.setIdentityResolverFactory(new IdentityResolverFactory());
+
+        FiltersDelegate filtersDelegate = Mockito.mock(FiltersDelegate.class);
+        Mockito.when(filtersDelegate.applyBeforeFilters(Mockito.any(ExecutionContextWithTokens.class), Mockito.any(TransportCommand.class))).thenReturn(true);
+        cmdProcessor.setFiltersDelegate(filtersDelegate);
 
 		Executor executor = new Executor() {
             @Override

@@ -267,7 +267,11 @@ public class SoapTransportCommandProcessor extends AbstractTerminateableHttpComm
                             writeResponse(command, operationBinding, result.getResult(), null, context, bytesRead);
                         }
                     } finally {
-                        command.onComplete();
+                        try {
+                            applyAfterFilters(context, command);
+                        } finally {
+                            command.onComplete();
+                        }
                     }
                 }
             }
@@ -283,7 +287,11 @@ public class SoapTransportCommandProcessor extends AbstractTerminateableHttpComm
                 command.getResponse().setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                 writeResponse(command, null, null, e, resolveContextForErrorHandling(context, command), 0);
             } finally {
-                command.onComplete();
+                try {
+                    applyAfterFilters(context, command);
+                } finally {
+                    command.onComplete();
+                }
             }
         }
     }

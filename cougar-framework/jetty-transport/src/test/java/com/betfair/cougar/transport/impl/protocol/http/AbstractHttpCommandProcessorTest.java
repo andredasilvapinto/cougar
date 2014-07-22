@@ -36,12 +36,8 @@ import com.betfair.cougar.core.api.transcription.Parameter;
 import com.betfair.cougar.core.api.transcription.ParameterType;
 import com.betfair.cougar.core.impl.DefaultTimeConstraints;
 import com.betfair.cougar.logging.CougarLoggingUtils;
-import org.slf4j.LoggerFactory;
-import com.betfair.cougar.transport.api.CommandResolver;
-import com.betfair.cougar.transport.api.CommandValidator;
-import com.betfair.cougar.transport.api.ExecutionCommand;
-import com.betfair.cougar.transport.api.RequestLogger;
-import com.betfair.cougar.transport.api.RequestTimeResolver;
+import com.betfair.cougar.transport.api.*;
+import com.betfair.cougar.transport.impl.filters.FiltersDelegate;
 import com.betfair.cougar.transport.api.protocol.http.HttpCommand;
 import com.betfair.cougar.transport.impl.CommandValidatorRegistry;
 import com.betfair.cougar.transport.impl.protocol.http.rescript.RescriptOperationBindingTest;
@@ -123,6 +119,7 @@ public class AbstractHttpCommandProcessorTest {
     protected CommandValidatorRegistry<HttpCommand> validatorRegistry = new CommandValidatorRegistry<HttpCommand>();
     protected RequestTimeResolver requestTimeResolver;
     protected LocalCommandProcessor commandProcessor;
+    protected FiltersDelegate filtersDelegate;
 
     @BeforeClass
     public static void suppressLogging() {
@@ -143,6 +140,9 @@ public class AbstractHttpCommandProcessorTest {
         when(request.getHeaderNames()).thenReturn(RescriptOperationBindingTest.enumerator(new ArrayList<String>().iterator()));
 
         requestTimeResolver = mock(RequestTimeResolver.class);
+
+        filtersDelegate = mock(FiltersDelegate.class);
+        when(filtersDelegate.applyBeforeFilters(any(ExecutionContextWithTokens.class), any(TransportCommand.class))).thenReturn(true);
 
 		response = mock(HttpServletResponse.class);
 		testOut = new TestServletOutputStream();
@@ -466,6 +466,7 @@ public class AbstractHttpCommandProcessorTest {
 		commandProcessor.setRequestLogger(logger);
         commandProcessor.setValidatorRegistry(validatorRegistry);
         commandProcessor.setHardFailEnumDeserialisation(true);
+        commandProcessor.setFiltersDelegate(filtersDelegate);
 	}
 
 	protected class TestEV implements ExecutionVenue {

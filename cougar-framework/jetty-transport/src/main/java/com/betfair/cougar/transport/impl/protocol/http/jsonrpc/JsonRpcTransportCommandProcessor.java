@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -259,7 +258,7 @@ public class JsonRpcTransportCommandProcessor extends AbstractHttpCommandProcess
 	}
 
     @Override
-    public void process(HttpCommand command) {
+    public void process(final HttpCommand command) {
         incrementCommandsProcessed();
         ExecutionContextWithTokens ctx = null;
         try {
@@ -267,43 +266,11 @@ public class JsonRpcTransportCommandProcessor extends AbstractHttpCommandProcess
             final CommandResolver<HttpCommand> resolver = createCommandResolver(command);
             ctx = resolver.resolveExecutionContext();
 
+            if (applyBeforeFilters(ctx, command)) return;
+
             final TimeConstraints realTimeConstraints = DefaultTimeConstraints.rebaseFromNewStartTime(ctx.getRequestTime(), readRawTimeConstraints(command.getRequest()));
             final ExecutionContextWithTokens finalCtx = ctx;
-            ExecutionCommand resolveCommand = new ExecutionCommand() {
-                @Override
-                public OperationKey getOperationKey() {
-                    return IDENTITY_RESOLUTION_OPDEF.getOperationKey();
-                }
-
-                @Override
-                public Object[] getArgs() {
-                    return new Object[0];
-                }
-
-                @Override
-                public void onResult(ExecutionResult executionResult) {
-                    Iterable<ExecutionCommand> batchCalls = resolver.resolveExecutionCommands();
-                    if (executionResult.isFault()) {
-                        for (ExecutionCommand exec : batchCalls) {
-                            exec.onResult(executionResult);
-                        }
-                    }
-                    // now we have an ExecutionContext that's correctly filled..
-                    else {
-                        // this has to be an ExecutionContext and not a ExecutionContextWithTokens to ensure that
-                        // BaseExecutionVenue doesn't try to re-resolve
-                        ExecutionContext context = ExecutionContextFactory.resolveExecutionContext(finalCtx, finalCtx.getIdentity());
-                        for (ExecutionCommand exec : resolver.resolveExecutionCommands()) {
-                            executeCommand(exec, context);
-                        }
-                    }
-                }
-
-                @Override
-                public TimeConstraints getTimeConstraints() {
-                    return realTimeConstraints;
-                }
-            };
+            ExecutionCommand resolveCommand = createInitialIdentityExecutionCommand(command, resolver, realTimeConstraints, finalCtx);
             executeCommand(resolveCommand, ctx);
         } catch (CougarException ex) {
             //this indicates an exception beyond the normal flow occurred
@@ -315,6 +282,44 @@ public class JsonRpcTransportCommandProcessor extends AbstractHttpCommandProcess
             //publication mechanism doesn't work cleanly for JSON-RPC
             writeErrorResponse(command, ctx, new CougarServiceException(ServerFaultCode.ServiceRuntimeException, ex.getMessage()));
         }
+    }
+
+    private ExecutionCommand createInitialIdentityExecutionCommand(final HttpCommand command, final CommandResolver<HttpCommand> resolver, final TimeConstraints realTimeConstraints, final ExecutionContextWithTokens finalCtx) {
+        return new ExecutionCommand() {
+            @Override
+            public OperationKey getOperationKey() {
+                return IDENTITY_RESOLUTION_OPDEF.getOperationKey();
+            }
+
+            @Override
+            public Object[] getArgs() {
+                return new Object[0];
+            }
+
+            @Override
+            public void onResult(ExecutionResult executionResult) {
+                Iterable<ExecutionCommand> batchCalls = resolver.resolveExecutionCommands();
+                if (executionResult.isFault()) {
+                    for (ExecutionCommand exec : batchCalls) {
+                        exec.onResult(executionResult);
+                    }
+                }
+                // now we have an ExecutionContext that's correctly filled..
+                else {
+                    // this has to be an ExecutionContext and not a ExecutionContextWithTokens to ensure that
+                    // BaseExecutionVenue doesn't try to re-resolve
+                    ExecutionContext context = ExecutionContextFactory.resolveExecutionContext(finalCtx, finalCtx.getIdentity());
+                    for (ExecutionCommand exec : resolver.resolveExecutionCommands()) {
+                        executeCommand(exec, context);
+                    }
+                }
+            }
+
+            @Override
+            public TimeConstraints getTimeConstraints() {
+                return realTimeConstraints;
+            }
+        };
     }
 
 
@@ -357,7 +362,11 @@ public class JsonRpcTransportCommandProcessor extends AbstractHttpCommandProcess
                     bytesWritten, MediaType.APPLICATION_JSON_TYPE,
                     MediaType.APPLICATION_JSON_TYPE, error.getResponseCode());
 		} finally {
-			command.onComplete();
+            try {
+                applyAfterFilters(context, command);
+            } finally {
+                command.onComplete();
+            }
 		}
 	}
 
@@ -399,7 +408,11 @@ public class JsonRpcTransportCommandProcessor extends AbstractHttpCommandProcess
 				} catch (Exception e) {
                     writeErrorResponse(command, context, handleResponseWritingIOException(e, JsonRpcResponse.class));
 				} finally {
-					command.onComplete();
+                    try {
+                        applyAfterFilters(context, command);
+                    } finally {
+                        command.onComplete();
+                    }
 				}
 			}
 			return true;

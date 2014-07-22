@@ -23,42 +23,56 @@ import com.betfair.cougar.core.api.ev.OperationDefinition;
 import com.betfair.cougar.core.api.ev.OperationKey;
 import com.betfair.cougar.core.api.exception.CougarException;
 import com.betfair.cougar.core.api.exception.CougarFrameworkException;
-import com.betfair.cougar.transport.api.CommandResolver;
-import com.betfair.cougar.transport.api.CommandValidator;
-import com.betfair.cougar.transport.api.ExecutionCommand;
-import com.betfair.cougar.transport.api.TransportCommand;
-import com.betfair.cougar.transport.api.TransportCommandProcessor;
+import com.betfair.cougar.transport.api.*;
+import com.betfair.cougar.transport.impl.filters.Filter;
+import com.betfair.cougar.transport.impl.filters.FiltersDelegate;
 import org.springframework.jmx.export.annotation.ManagedAttribute;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Base implementation of TransportCommandProcessor.
+ *
  * @param <T> The type of TransportCommand that the TransportHandler implementation can process
  */
 public abstract class AbstractCommandProcessor<T extends TransportCommand> implements TransportCommandProcessor<T> {
-	
-	private ExecutionVenue ev;
 
-	private Executor executor;
+    private ExecutionVenue ev;
+
+    private Executor executor;
 
     private AtomicLong executionsProcessed = new AtomicLong();
     private AtomicLong commandsProcessed = new AtomicLong();
     private AtomicLong errorsWritten = new AtomicLong();
     private AtomicLong ioErrorsEncountered = new AtomicLong();
-	/**
-	 * Set the ExecutionVenue that will execute the resolved command
-	 * @param ev
-	 */
-	public final void setExecutionVenue(ExecutionVenue ev) {
-		this.ev = ev;
-	}
+
+    private List<Filter<TransportCommand>> filters = Collections.emptyList();
+
+    private FiltersDelegate filtersDelegate;
+
+
+    @PostConstruct
+    private void init() {
+        this.filtersDelegate = new FiltersDelegate(filters);
+    }
+
+    /**
+     * Set the ExecutionVenue that will execute the resolved command
+     *
+     * @param ev
+     */
+    public final void setExecutionVenue(ExecutionVenue ev) {
+        this.ev = ev;
+    }
 
     /**
      * Returns the ExecutionVenue that will execute resolved commands
+     *
      * @return the ExecutionVenue
      */
     public ExecutionVenue getExecutionVenue() {
@@ -66,37 +80,58 @@ public abstract class AbstractCommandProcessor<T extends TransportCommand> imple
     }
 
     /**
-	 * 
-	 * @param executor
-	 */
-	public void setExecutor(Executor executor) {
-		this.executor = executor;
-	}
+     * @param executor
+     */
+    public void setExecutor(Executor executor) {
+        this.executor = executor;
+    }
 
     protected Executor getExecutor() {
         return executor;
     }
 
+    public void setFilters(List<Filter<TransportCommand>> filters) {
+        this.filters = filters;
+    }
+
     /**
-	 * Processes a TransportCommand.
-	 * @param command
-	 */
-	public void process(final T command) {
+     * Processes a TransportCommand.
+     *
+     * @param command
+     */
+    public void process(final T command) {
         incrementCommandsProcessed();
-		ExecutionContextWithTokens ctx = null;
-		try {
+        ExecutionContextWithTokens ctx = null;
+        try {
             validateCommand(command);
-			CommandResolver<T> resolver = createCommandResolver(command);
-			ctx = resolver.resolveExecutionContext();
-			for (ExecutionCommand exec : resolver.resolveExecutionCommands()) {
+            CommandResolver<T> resolver = createCommandResolver(command);
+            ctx = resolver.resolveExecutionContext();
+
+            if (applyBeforeFilters(ctx, command)) return;
+
+            //TODO: Multiple commands?
+            for (ExecutionCommand exec : resolver.resolveExecutionCommands()) {
                 executeCommand(exec, ctx);
-			}
-		} catch(CougarException ce) {
+            }
+        } catch (CougarException ce) {
             executeError(command, ctx, ce);
-		} catch (Exception e) {
+        } catch (Exception e) {
             executeError(command, ctx, new CougarFrameworkException("Unexpected exception while processing transport command", e));
-		}
-	}
+        }
+    }
+
+    protected boolean applyBeforeFilters(ExecutionContextWithTokens ctx, T command) {
+        if (!filtersDelegate.applyBeforeFilters(ctx, command)) {
+            // stopped execution
+            executeError(command, ctx, new CougarFrameworkException("Execution blocked by a filter"));
+            return true;
+        }
+        return false;
+    }
+
+    protected void applyAfterFilters(ExecutionContextWithTokens ctx, T command) {
+        filtersDelegate.applyAfterFilters(ctx, command);
+    }
 
     /**
      * Get the list of command validators to be used to validate commands.
@@ -115,17 +150,18 @@ public abstract class AbstractCommandProcessor<T extends TransportCommand> imple
 
     /**
      * Execute the supplied command
+     *
      * @param finalExec
      * @param finalCtx
      */
     protected void executeCommand(final ExecutionCommand finalExec, final ExecutionContext finalCtx) {
         executionsProcessed.incrementAndGet();
         ev.execute(finalCtx,
-                   finalExec.getOperationKey(),
-                   finalExec.getArgs(),
-                   finalExec,
-                   executor,
-                   finalExec.getTimeConstraints());
+                finalExec.getOperationKey(),
+                finalExec.getArgs(),
+                finalExec,
+                executor,
+                finalExec.getTimeConstraints());
     }
 
     protected void executeError(final T finalExec, final ExecutionContextWithTokens finalCtx, final CougarException finalError) {
@@ -136,39 +172,47 @@ public abstract class AbstractCommandProcessor<T extends TransportCommand> imple
             }
         });
     }
-	
-	/**
-	 * Create an implementation that will resolve the supplied command to an operation key,
-	 * arguments and a listener for callback
-	 * @param command the command to resolve
-	 * @return the resolved operation, arguments and listener
-	 */
-	protected abstract CommandResolver<T> createCommandResolver(T command);
-	
-	/**
-	 * Write an exception back to the client.
-	 * @param command the command that caused the error
-	 * @param e the exception that was thrown
-	 */
-	protected abstract void writeErrorResponse(T command, ExecutionContextWithTokens context, CougarException e);
 
-	protected final OperationDefinition getOperationDefinition(OperationKey key) {
-		return ev.getOperationDefinition(key);
-	}
+    /**
+     * Create an implementation that will resolve the supplied command to an operation key,
+     * arguments and a listener for callback
+     *
+     * @param command the command to resolve
+     * @return the resolved operation, arguments and listener
+     */
+    protected abstract CommandResolver<T> createCommandResolver(T command);
 
-	/**
-	 * Convenience abstract implementation of CommandResolver where only a single
-	 * ExecutionRequest is to be resolved.
-	 * @param <C> The type of Command that the CommandResolver implementation can resolve
-	 */
-	protected abstract class SingleExecutionCommandResolver<C extends TransportCommand> implements CommandResolver<C> {
-		public final Iterable<ExecutionCommand> resolveExecutionCommands() {
-			ArrayList<ExecutionCommand> list = new ArrayList<ExecutionCommand>();
-			list.add(resolveExecutionCommand());
-			return list;
-		}
-		public abstract ExecutionCommand resolveExecutionCommand();
-	}
+    /**
+     * Write an exception back to the client.
+     *
+     * @param command the command that caused the error
+     * @param e       the exception that was thrown
+     */
+    protected abstract void writeErrorResponse(T command, ExecutionContextWithTokens context, CougarException e);
+
+    protected final OperationDefinition getOperationDefinition(OperationKey key) {
+        return ev.getOperationDefinition(key);
+    }
+
+    public void setFiltersDelegate(FiltersDelegate filtersDelegate) {
+        this.filtersDelegate = filtersDelegate;
+    }
+
+    /**
+     * Convenience abstract implementation of CommandResolver where only a single
+     * ExecutionRequest is to be resolved.
+     *
+     * @param <C> The type of Command that the CommandResolver implementation can resolve
+     */
+    protected abstract class SingleExecutionCommandResolver<C extends TransportCommand> implements CommandResolver<C> {
+        public final Iterable<ExecutionCommand> resolveExecutionCommands() {
+            ArrayList<ExecutionCommand> list = new ArrayList<ExecutionCommand>();
+            list.add(resolveExecutionCommand());
+            return list;
+        }
+
+        public abstract ExecutionCommand resolveExecutionCommand();
+    }
 
     protected final void incrementIoErrorsEncountered() {
         ioErrorsEncountered.incrementAndGet();

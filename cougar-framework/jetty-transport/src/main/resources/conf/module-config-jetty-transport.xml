@@ -151,6 +151,7 @@
         <property name="executor" ref="cougar.core.CommandProcessorExecutor"/>
         <property name="requestLogger" ref="httpRequestLogger"/>
         <property name="validatorRegistry" ref="httpCommandValidatorRegistry"/>
+        <property name="filters" ref="globalFilters"/>
     </bean>
 
     <bean id="defaultRequestTimeResolver" class="com.betfair.cougar.transport.impl.protocol.http.SimpleHttpRequestTimeResolver">
@@ -162,6 +163,7 @@
         <property name="contentTypeNormaliser" ref="contentTypeNormaliser"/>
         <property name="hardFailEnumDeserialisation" value="$COUGAR-JETTY{cougar.http.enums.hardFailure}"/>
         <property name="maxPostBodyLength" value="$COUGAR-JETTY{cougar.http.rescript.maxPostBodyLength}"/>
+        <property name="filters" ref="httpFilters"/>
     </bean>
 
     <bean id="soapCommandProcessor" class="com.betfair.cougar.transport.impl.protocol.http.soap.SoapTransportCommandProcessor" parent="httpCommandProcessor" scope="singleton">
@@ -177,6 +179,22 @@
         <property name="contentTypeNormaliser" ref="contentTypeNormaliser"/>
         <property name="hardFailEnumDeserialisation" value="$COUGAR-JETTY{cougar.http.enums.hardFailure}"/>
         <property name="maxPostBodyLength" value="$COUGAR-JETTY{cougar.http.jsonrpc.maxPostBodyLength}"/>
+    </bean>
+
+    <bean id="globalFilters" class="org.springframework.beans.factory.config.ListFactoryBean">
+        <property name="sourceList">
+            <list>
+                <bean id="qosFilter" class="com.betfair.cougar.transport.impl.filters.QOSFilter"/>
+            </list>
+        </property>
+    </bean>
+
+    <bean id="httpFilters" class="org.springframework.beans.factory.config.ListFactoryBean">
+        <property name="sourceList">
+            <list merge="true">
+                <bean id="zipkinHTTPFilter" class="com.betfair.cougar.transport.impl.filters.ZipkinHTTPFilter"/>
+            </list>
+        </property>
     </bean>
 
     <bean id="notFoundCommandProcessor" class="com.betfair.cougar.transport.impl.protocol.http.ServiceNotFoundHttpCommandProcessor" parent="httpCommandProcessor" scope="singleton"/>

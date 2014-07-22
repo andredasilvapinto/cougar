@@ -237,9 +237,12 @@ public class RescriptTransportCommandProcessor extends AbstractTerminateableHttp
                         resolveContextForErrorHandling(context, command), bytesRead,
                         bytesWritten, requestMediaType,
                         responseMediaType, error.getResponseCode());
-
 			} finally {
-				command.onComplete();
+                try {
+                    applyAfterFilters(context, command);
+                } finally {
+                    command.onComplete();
+                }
 			}
 		}
 	}
@@ -309,7 +312,11 @@ public class RescriptTransportCommandProcessor extends AbstractTerminateableHttp
 			} catch (Exception e) {
                 writeErrorResponse(command, context, handleResponseWritingIOException(e, result.getClass()));
             } finally {
-				command.onComplete();
+                try {
+                    applyAfterFilters(context, command);
+                } finally {
+                    command.onComplete();
+                }
 			}
 		}
 		return 0;
