@@ -113,7 +113,7 @@ public final class ZipkinAnnotationsStore {
     @Nonnull
     ZipkinAnnotationsStore addBinaryAnnotation(@Nonnull String key, short value, @Nonnull Endpoint endpoint) {
         ByteBuffer wrappedValue = ByteBuffer.allocate(SHORT_SIZE_B).putShort(value);
-        return addBinaryAnnotation(key, wrappedValue, AnnotationType.BOOL, endpoint);
+        return addBinaryAnnotation(key, wrappedValue, AnnotationType.I16, endpoint);
     }
 
     @Nonnull
@@ -143,7 +143,7 @@ public final class ZipkinAnnotationsStore {
     @Nonnull
     ZipkinAnnotationsStore addBinaryAnnotation(@Nonnull String key, byte[] value, @Nonnull Endpoint endpoint) {
         ByteBuffer wrappedValue = ByteBuffer.wrap(value);
-        return addBinaryAnnotation(key, wrappedValue, AnnotationType.BOOL, endpoint);
+        return addBinaryAnnotation(key, wrappedValue, AnnotationType.BYTES, endpoint);
     }
 
 
